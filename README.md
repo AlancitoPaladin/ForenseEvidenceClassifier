@@ -80,3 +80,4 @@ Descomente el bloque de ejemplo al final de `main.py` y ajuste la ruta del archi
 - ¿Qué hago si falta SIFT? Instale `opencv-contrib-python` y asegúrese de que su versión de OpenCV incluya SIFT.
 - ¿Puedo usar RBF en SVM? Cambie `SVC(kernel='linear')` por `SVC(kernel='rbf')` y ajuste `C`/`gamma`.
 # ForenseEvidenceClassifier
+# ForenseEvidenceClassifier
