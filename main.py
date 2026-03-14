@@ -1,16 +1,32 @@
-from sklearn.metrics import classification_report, accuracy_score
+import os
+from datetime import datetime
+
+import joblib
+import numpy as np
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.metrics import classification_report, accuracy_score, precision_score, recall_score
 from sklearn.model_selection import train_test_split
-from sklearn.svm import SVC
-from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier  # Nuevo: RF y GBT
 
 import bvw as bvw
 from bvw import BagOfVisualWords
 
+# from sklearn.svm import SVC
+
 if __name__ == "__main__":
     # 1. Carga dataset
-    #X, y = bvw.load_dataset("/Volumes/AlanDisk/Shoes/Results")
-    X, y = bvw.load_dataset("./images")
+    X, y = bvw.load_dataset("/Volumes/AlanDisk/Shoes/ResultsGel")
+    # X, y = bvw.load_dataset("./images")
     print(f'Dataset cargado: images={len(X)}')
+
+    # Sanity checks de dataset
+    if len(X) == 0:
+        raise ValueError("El dataset está vacío o no se pudieron leer imágenes.")
+    classes, counts = np.unique(y, return_counts=True)
+    if len(classes) < 2:
+        raise ValueError("Se requieren al menos 2 clases para clasificar.")
+    low_count = classes[counts < 2]
+    if len(low_count) > 0:
+        print(f"Aviso: clases con menos de 2 imágenes: {', '.join(low_count)}")
 
     # 2. Split en train/test
     X_train, X_test, y_train, y_test = train_test_split(
@@ -20,7 +36,7 @@ if __name__ == "__main__":
 
     # 3. Inicialización y entrenamiento de la BoVW con SIFT+KAZE
     # Hacer escaneo desde 100 hasta 500 clusters e ir guardando todos y cada uno de los modelos que se tengan.
-    bovw = BagOfVisualWords(n_clusters=250, detector_type="SIFT", nfeatures=150)
+    bovw = BagOfVisualWords(n_clusters=100, detector_type="SIFT", nfeatures=100)
     print(f'Creando Bag of Visual Words usando {bovw.detector_type}...')
     bovw.fit(X_train, y_train)
     print('Bag of Visual Words creada.')
@@ -32,47 +48,75 @@ if __name__ == "__main__":
 
     # 5. Clasificador
     # Opción A: Random Forest (comentado)
-    # rf_clf = RandomForestClassifier(
-    #     n_estimators=300, max_depth=None, random_state=42, n_jobs=-1
-    # )
+    clf = RandomForestClassifier(
+        n_estimators=300, max_depth=None, random_state=42, n_jobs=-1
+    )
 
     # Opción B: Árboles impulsados por gradiente (Gradient Boosting) — ACTIVADO
-    clf = GradientBoostingClassifier(random_state=42)
+    # clf = GradientBoostingClassifier(random_state=42)
 
     # Opción C: SVM (comentado)
-    # clf = SVC(kernel='linear')  # 'linear', 'rbf', 'poly', 'sigmoid'
+    # clf = SVC(kernel='poly')  # 'linear', 'rbf', 'poly', 'sigmoid'
 
     print('Entrenando clasificador...')
     clf.fit(X_train_bovw, y_train)
     print('Clasificador entrenado.')
 
+    # Guardado de modelos
+    os.makedirs("models", exist_ok=True)
+    timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    clf_name = clf.__class__.__name__
+    tag = f"{timestamp}_bovw{bovw.n_clusters}_{bovw.detector_type}_{clf_name}"
+    bovw_path = f"models/bovw_{tag}.joblib"
+    clf_path = f"models/clf_{tag}.joblib"
+
+    bovw_state = {
+        "n_clusters": bovw.n_clusters,
+        "detector_type": bovw.detector_type,
+        "nfeatures": bovw.nfeatures,
+        "bag": bovw.bag,  # KMeans serializable
+    }
+    joblib.dump(bovw_state, bovw_path)
+    joblib.dump(clf, clf_path)
+    print(f"Modelos guardados:\n- {bovw_path}\n- {clf_path}")
+
     # 6. Evaluación
     y_pred = clf.predict(X_test_bovw)
-    print('Reporte de clasificación:')
+    print('\n' + '=' * 60)
+    print('RESULTADOS DE EVALUACIÓN')
+    print('=' * 60)
+
+    # Reporte completo (ya incluye precisión y recall por clase)
+    print('\nReporte de clasificación:')
     print(classification_report(y_test, y_pred))
-    print('Exactitud:', accuracy_score(y_test, y_pred))
 
-    # 7. Ejemplo: predicción de una imagen
-    # new_img = cv2.imread('./predict/predictE.jpg', cv2.IMREAD_GRAYSCALE)
-    # new_bovw = bovw.transform([new_img])
-    # pred = clf.predict(new_bovw)
-    # print(f'Letra predecida: {pred[0]}')
+    # Métricas globales
+    print('\n--- MÉTRICAS GLOBALES ---')
+    print(f'Exactitud (Accuracy): {accuracy_score(y_test, y_pred):.4f}')
+    print(f'Precisión promedio (weighted): {precision_score(y_test, y_pred, average="weighted"):.4f}')
+    print(f'Recall promedio (weighted): {recall_score(y_test, y_pred, average="weighted"):.4f}')
 
-    # 8.- Formación de nuevas bolsas de palabras (BOVW) a partir de la concatenación de SIFT y KAZE.
-    # bovw_concat = BagOfVisualWords(n_clusters=350, detector_type="SIFT+KAZE", nfeatures=150)
-    # bovw_concat.fit(compare_imgs, compare_labels)
-    # X_concat_bovw = bovw_concat.transform(compare_imgs)
-    # print(f'BOVW concatenada creada con {len(X_concat_bovw)} muestras.')
+    # Obtener las clases únicas
+    classes = sorted(set(y_test))
 
-"""
- 
-- **Macro average: el promedio de la métrica (precisión, recall, etc.) 
-  sin importar cuántas muestras hay de cada etiqueta.
-  Es decir, se calcula la métrica para cada clase (etiqueta) y luego se promedian todos esos valores.
+    # Calcular precisión y recall por clase
+    precision_per_class = precision_score(y_test, y_pred, average=None, labels=classes)
+    recall_per_class = recall_score(y_test, y_pred, average=None, labels=classes)
 
-- **Weighted average: es similar, pero cada métrica de etiqueta se pondera según cuántas muestras 
-  hay de esa etiqueta ("support" o soporte).
+    print('\n--- MÉTRICAS POR CLASE ---')
+    for i, class_name in enumerate(classes):
+        print(f'{class_name}:')
+        print(f'  Precisión: {precision_per_class[i]:.4f}')
+        print(f'  Recall: {recall_per_class[i]:.4f}')
 
-- Macro avg: promedia las métricas de cada etiqueta/clase.
-- Weighted avg: promedia las métricas de cada etiqueta/clase pero ponderando según el número de muestras por clase
-"""
+    print('=' * 60 + '\n')
+
+    # Carga (reconstrucción de BoVW)
+    # state = joblib.load(bovw_path)
+    # bovw_loaded = BagOfVisualWords(
+    #     n_clusters=state["n_clusters"],
+    #     detector_type=state["detector_type"],
+    #     nfeatures=state["nfeatures"],
+    # )
+    # bovw_loaded.bag = state["bag"]
+    # bovw_loaded.detector = get_detector(bovw_loaded.detector_type, bovw_loaded.nfeatures)

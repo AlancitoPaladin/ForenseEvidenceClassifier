@@ -3,20 +3,21 @@ import os
 import cv2
 import numpy as np
 from sklearn.base import BaseEstimator, TransformerMixin
-from sklearn.cluster import KMeans
+from sklearn.cluster import KMeans, MiniBatchKMeans
 
 
-def load_dataset(dataset_path):
+def load_dataset(dataset_path, include_root_images=False, root_label="default"):
     X = []
     y = []
-    # Revisa primero si hay imágenes directamente en la carpeta
-    for fname in os.listdir(dataset_path):
-        img_path = os.path.join(dataset_path, fname)
-        if os.path.isfile(img_path) and fname.lower().endswith((".jpg", ".png", ".tif", ".tiff")):
-            img = cv2.imread(img_path, cv2.IMREAD_GRAYSCALE)
-            if img is not None:
-                X.append(img)
-                y.append("default")  # etiqueta genérica
+    # Revisa primero si hay imágenes directamente en la carpeta (opcional)
+    if include_root_images:
+        for fname in os.listdir(dataset_path):
+            img_path = os.path.join(dataset_path, fname)
+            if os.path.isfile(img_path) and fname.lower().endswith((".jpg", ".png", ".tif", ".tiff")):
+                img = cv2.imread(img_path, cv2.IMREAD_GRAYSCALE)
+                if img is not None:
+                    X.append(img)
+                    y.append(root_label)
 
     # Revisa si hay subcarpetas (varias clases)
     for label in sorted(os.listdir(dataset_path)):
@@ -34,9 +35,9 @@ def load_dataset(dataset_path):
     return X, y
 
 
-def load_images(dataset_path):
+def load_images(dataset_path, max_classes=2):
     """
-    Retorna una imagen de cada clase encontrada (máximo 2, útil para pruebas rápidas).
+    Retorna una imagen de cada clase encontrada (hasta max_classes, útil para pruebas rápidas).
     """
     X = []
     y = []
@@ -53,7 +54,7 @@ def load_images(dataset_path):
                 X.append(img)
                 y.append(label)
                 labels_seen.add(label)
-            if len(labels_seen) >= 21:
+            if len(labels_seen) >= max_classes:
                 return X, y
     return X, y
 
@@ -97,10 +98,23 @@ def feature_extraction(X, detector):
 
 
 class BagOfVisualWords(BaseEstimator, TransformerMixin):
-    def __init__(self, n_clusters, detector_type="SIFT", nfeatures=0):
+    def __init__(
+        self,
+        n_clusters,
+        detector_type="SIFT",
+        nfeatures=0,
+        use_minibatch=True,
+        batch_size=1024,
+        max_descriptors_per_class=None,
+        random_state=0,
+    ):
         self.n_clusters = n_clusters
         self.detector_type = detector_type
         self.nfeatures = nfeatures
+        self.use_minibatch = use_minibatch
+        self.batch_size = batch_size
+        self.max_descriptors_per_class = max_descriptors_per_class
+        self.random_state = random_state
         self.detector = get_detector(detector_type, nfeatures)
 
     def fit(self, X, y=None):
@@ -119,7 +133,11 @@ class BagOfVisualWords(BaseEstimator, TransformerMixin):
         if self.bneck_value == float("inf"):
             raise ValueError("No se encontraron keypoints en el dataset.")
 
-        self.n_descriptors = max(1, int(0.8 * self.bneck_value))
+        if self.max_descriptors_per_class is not None and self.max_descriptors_per_class > 0:
+            self.n_descriptors = min(self.max_descriptors_per_class, self.bneck_value)
+        else:
+            self.n_descriptors = max(1, int(0.8 * self.bneck_value))
+
         selected_descriptors = []
         for label in self.labels_list:
             kp = self.labels_dict[label]['kp']
@@ -131,8 +149,23 @@ class BagOfVisualWords(BaseEstimator, TransformerMixin):
             idx_top = idx_sorted[:n_sel]
             selected_descriptors.append(des[idx_top])
 
+        if not selected_descriptors:
+            raise ValueError("No hay descriptores suficientes para construir el diccionario visual.")
+
         des_vector = np.vstack(selected_descriptors).astype(np.float64)
-        self.bag = KMeans(n_clusters=self.n_clusters, random_state=0).fit(des_vector)
+        if self.use_minibatch:
+            self.bag = MiniBatchKMeans(
+                n_clusters=self.n_clusters,
+                batch_size=self.batch_size,
+                random_state=self.random_state,
+                n_init="auto",
+            ).fit(des_vector)
+        else:
+            self.bag = KMeans(
+                n_clusters=self.n_clusters,
+                random_state=self.random_state,
+                n_init="auto",
+            ).fit(des_vector)
         return self
 
     def transform(self, X):
@@ -150,7 +183,7 @@ class BagOfVisualWords(BaseEstimator, TransformerMixin):
         return feature_vector
 
 
-def sift_and_kaze(img, nfeatures_sift=500, kaze_threshold=0.001):
+def sift_and_kaze(img, nfeatures_sift=500, kaze_threshold=0.001, max_des=800, rng=None):
     """
     Detector híbrido que combina SIFT + KAZE.
     Devuelve keypoints y descriptores concatenados.
@@ -170,10 +203,12 @@ def sift_and_kaze(img, nfeatures_sift=500, kaze_threshold=0.001):
     if des_sift is None: des_sift, kp_sift = np.empty((0, 128), np.float32), []
     if des_kaze is None: des_kaze, kp_kaze = np.empty((0, 64), np.float32), []
 
+    if rng is None:
+        rng = np.random.default_rng(0)
     if des_sift.shape[0] > max_des:
-        des_sift = des_sift[np.random.choice(des_sift.shape[0], max_des, replace=False)]
+        des_sift = des_sift[rng.choice(des_sift.shape[0], max_des, replace=False)]
     if des_kaze.shape[0] > max_des:
-        des_kaze = des_kaze[np.random.choice(des_kaze.shape[0], max_des, replace=False)]
+        des_kaze = des_kaze[rng.choice(des_kaze.shape[0], max_des, replace=False)]
 
     # Padding de KAZE a 128 dims
     if des_kaze.shape[0] > 0:

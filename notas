@@ -1,5 +1,2 @@
-    input_folder = "/Volumes/AlanDisk/Shoes/Adidas(blood)"  # macOS/Linux
-    # input_folder = r"E:\Datasets\MisImagenes"                   # Windows
-
-    # 🔹 Carpeta donde guardar las imágenes procesadas
+    input_folder = "/Volumes/AlanDisk/Shoes/Adidas(blood)"
     output_folder = "/Volumes/AlanDisk/Shoes/Adidas(result)"

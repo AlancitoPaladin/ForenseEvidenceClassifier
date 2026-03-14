@@ -1,83 +1,101 @@
 # Singns
 
-Proyecto de reconocimiento de letras usando Bag of Visual Words (BoVW) y un clasificador SVM sobre descriptores locales (SIFT/KAZE) con OpenCV y scikit‑learn.
+Clasificador de imágenes por clases (letras/etiquetas) usando Bag of Visual Words (BoVW) con descriptores locales (SIFT/KAZE) y un clasificador supervisado de scikit-learn.
 
-## ¿Qué hace este proyecto?
-- Carga un conjunto de imágenes organizado por carpetas (una carpeta por clase/etiqueta).
-- Extrae puntos clave y descriptores con SIFT o KAZE.
-- Construye un diccionario visual (KMeans) para representar cada imagen como un histograma de “palabras visuales”.
-- Entrena una SVM para clasificar las imágenes según su letra/clase.
-- Evalúa el modelo (classification_report y exactitud).
-- (Opcional) Compara y registra en CSV coordenadas de keypoints “coincidentes” entre SIFT y KAZE para una imagen por clase.
-
-## Estructura del proyecto
-```
-Singns/
-├─ bvw.py                # Lógica de BoVW: carga, detectores, extracción y transformaciones
-├─ main.py               # Script principal: entrenamiento, evaluación y exportación de CSV
-├─ dataset/              # (Opcional) Otro dataset
-├─ images/               # Dataset principal organizado por clases
-│  ├─ a/
-│  ├─ b/
-│  └─ ...
-├─ predict/              # Imágenes para pruebas de predicción manual
-└─ coordenadas_matches.csv (generado por main.py)
-```
+## Resumen
+- Lee imágenes organizadas por carpetas (una carpeta = una clase).
+- Extrae keypoints y descriptores con SIFT, KAZE o un híbrido.
+- Construye un diccionario visual con KMeans/MiniBatchKMeans.
+- Representa cada imagen como un histograma BoVW.
+- Entrena y evalúa un clasificador (por defecto RandomForest).
+- Guarda el modelo BoVW y el clasificador en `models/`.
 
 ## Requisitos
 - Python 3.9+
-- OpenCV (cv2) con SIFT disponible. En OpenCV moderno, SIFT ya está integrado; si no, instale `opencv-contrib-python`.
-- scikit-learn, numpy, matplotlib
+- OpenCV con SIFT disponible (`opencv-contrib-python` si tu build no trae SIFT)
+- scikit-learn, numpy, joblib
 
-Instalación rápida (ejemplo):
-```
-pip install opencv-contrib-python scikit-learn numpy matplotlib
+Instalación rápida:
+```bash
+pip install opencv-contrib-python scikit-learn numpy joblib
 ```
 
-## Cómo ejecutar
-Desde la raíz del proyecto:
+## Uso rápido
+1. Asegura tu dataset con esta estructura:
+```text
+images/
+  a/
+  b/
+  c/
 ```
+
+2. Edita la ruta del dataset en `main.py`:
+```python
+X, y = bvw.load_dataset("/ruta/a/tu/dataset")
+# X, y = bvw.load_dataset("./images")
+```
+
+3. Ejecuta:
+```bash
 python main.py
 ```
-El script:
-1. Carga imágenes desde `./images` (carpetas por clase).
-2. Divide en train/test (25% test).
-3. Construye BoVW (por defecto KAZE en main.py, configurable) y extrae características.
-4. Entrena una SVM (kernel lineal por defecto).
-5. Imprime reporte de clasificación y exactitud.
-6. Genera `coordenadas_matches.csv` con coincidencias geométricas SIFT↔KAZE para una imagen por clase.
 
-## Parámetros relevantes
+Al finalizar verás métricas de evaluación y se guardarán los modelos en `models/`.
+
+## Configuración clave
 En `main.py`:
-- `detector_type = "KAZE"` (puede ser "SIFT" o "KAZE").
-- `nfeatures = 150` (límite de keypoints al usar SIFT).
-- `BagOfVisualWords(n_clusters=150, ...)` controla el tamaño del diccionario visual.
+- `BagOfVisualWords(n_clusters=100, detector_type="SIFT", nfeatures=100)`
+  - `n_clusters`: tamaño del diccionario visual.
+  - `detector_type`: `SIFT`, `KAZE` o `SIFT+KAZE`.
+  - `nfeatures`: límite de keypoints para SIFT.
+
+- Clasificador (por defecto):
+```python
+clf = RandomForestClassifier(
+    n_estimators=300, max_depth=None, random_state=42, n_jobs=-1
+)
+```
+Puedes cambiar a SVM o GradientBoosting (ya hay opciones comentadas en `main.py`).
 
 ## Predicción de una imagen nueva
-Descomente el bloque de ejemplo al final de `main.py` y ajuste la ruta del archivo:
+Ejemplo usando el modelo ya entrenado en memoria:
 ```python
-# new_img = cv2.imread('./predict/mi_imagen.jpg', cv2.IMREAD_GRAYSCALE)
-# new_bovw = bovw.transform([new_img])
-# pred = clf.predict(new_bovw)
-# print(f'Letra predecida: {pred[0]}')
+new_img = cv2.imread('./predict/mi_imagen.jpg', cv2.IMREAD_GRAYSCALE)
+new_bovw = bovw.transform([new_img])
+pred = clf.predict(new_bovw)
+print(f'Clase predicha: {pred[0]}')
 ```
 
-## Notas
-- El script `main.py` asume que `./images` existe y contiene carpetas con imágenes en escala de grises o RGB (se convierten a gris al leer).
-- Si no se detectan keypoints suficientes, BoVW lanzará un error. Verifique la calidad/resolución de imágenes.
-- Para la comparación geométrica de SIFT↔KAZE, se usa una distancia euclídea simple en píxeles; ajuste `distance_thresh` en `bvw.py`/`main.py` según el caso.
+Para usar modelos guardados, hay un bloque de ejemplo al final de `main.py` para reconstruir `BagOfVisualWords` desde `joblib`.
 
-## ¿Qué hace cada módulo?
-- `bvw.py`: 
-  - `load_dataset`, `load_images`: cargan imágenes y etiquetas.
-  - `get_detector`: crea SIFT/KAZE.
-  - `feature_extraction`: extrae descriptores.
-  - `BagOfVisualWords`: `fit` agrupa descriptores con KMeans; `transform` genera histogramas normalizados.
-  - `get_geom_matches_keypoints` y `plot_overlap_keypoints`: emparejan geométricamente keypoints SIFT↔KAZE y visualizan.
-- `main.py`: orquesta el flujo completo de entrenamiento, evaluación y exportación a CSV.
+## Estructura del proyecto
+```text
+Singns/
+├─ bvw.py                 # Lógica BoVW: carga, detectores, extracción y transformaciones
+├─ main.py                # Entrenamiento, evaluación y guardado de modelos
+├─ images/                # Dataset principal (por clase)
+├─ predict/               # Imágenes para pruebas manuales
+├─ models/                # Modelos guardados (se crea automáticamente)
+└─ util.py, reuse_model.py, show.py, rezise.py, bvw.py
+```
 
-## FAQ
-- ¿Qué hago si falta SIFT? Instale `opencv-contrib-python` y asegúrese de que su versión de OpenCV incluya SIFT.
-- ¿Puedo usar RBF en SVM? Cambie `SVC(kernel='linear')` por `SVC(kernel='rbf')` y ajuste `C`/`gamma`.
-# ForenseEvidenceClassifier
-# ForenseEvidenceClassifier
+## Detalles de implementación
+- `bvw.py`:
+  - `load_dataset` lee imágenes en gris por clase.
+  - `get_detector` expone SIFT/KAZE/SIFT+KAZE.
+  - `BagOfVisualWords.fit` construye el diccionario visual con KMeans/MiniBatchKMeans.
+  - `BagOfVisualWords.transform` genera histogramas normalizados por imagen.
+
+- `main.py`:
+  - Hace split train/test con estratificación.
+  - Entrena BoVW y el clasificador.
+  - Evalúa con `classification_report`, accuracy, precision y recall.
+  - Guarda modelos en `models/` con timestamp.
+
+## Problemas comunes
+- “No se encontraron keypoints”: revisa la calidad o el tamaño de las imágenes.
+- Pocas imágenes por clase: el script avisa si alguna clase tiene menos de 2 imágenes.
+- SIFT no disponible: instala `opencv-contrib-python`.
+
+## Licencia
+Por definir.
