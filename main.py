@@ -3,14 +3,12 @@ from datetime import datetime
 
 import joblib
 import numpy as np
-from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import classification_report, accuracy_score, precision_score, recall_score
 from sklearn.model_selection import train_test_split
+from sklearn.svm import SVC
 
 import bvw as bvw
 from bvw import BagOfVisualWords
-
-# from sklearn.svm import SVC
 
 if __name__ == "__main__":
     # 1. Carga dataset
@@ -47,16 +45,11 @@ if __name__ == "__main__":
     print('Extracción de características finalizada.')
 
     # 5. Clasificador
-    # Opción A: Random Forest (comentado)
-    clf = RandomForestClassifier(
-        n_estimators=300, max_depth=None, random_state=42, n_jobs=-1
-    )
-
-    # Opción B: Árboles impulsados por gradiente (Gradient Boosting) — ACTIVADO
+    # Clasificador usado en el artículo: SVM lineal
+    clf = SVC(kernel='linear')
+    # Opciones alternativas (no usadas en los resultados reportados):
+    # clf = RandomForestClassifier(n_estimators=300, max_depth=None, random_state=42, n_jobs=-1)
     # clf = GradientBoostingClassifier(random_state=42)
-
-    # Opción C: SVM (comentado)
-    # clf = SVC(kernel='poly')  # 'linear', 'rbf', 'poly', 'sigmoid'
 
     print('Entrenando clasificador...')
     clf.fit(X_train_bovw, y_train)

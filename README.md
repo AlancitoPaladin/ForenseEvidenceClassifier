@@ -7,7 +7,7 @@ Clasificador de imágenes de huellas de calzado para evidencia forense usando Ba
 - Extrae keypoints y descriptores con SIFT, KAZE o un híbrido.
 - Construye un diccionario visual con KMeans/MiniBatchKMeans.
 - Representa cada imagen como un histograma BoVW.
-- Entrena y evalúa un clasificador (por defecto RandomForest).
+- Entrena y evalúa un clasificador (por defecto SVM lineal).
 - Guarda el modelo BoVW y el clasificador en `models/`.
 
 ## Requisitos
@@ -50,11 +50,9 @@ En `main.py`:
 
 - Clasificador (por defecto):
 ```python
-clf = RandomForestClassifier(
-    n_estimators=300, max_depth=None, random_state=42, n_jobs=-1
-)
+clf = SVC(kernel='linear')
 ```
-Puedes cambiar a SVM o GradientBoosting (ya hay opciones comentadas en `main.py`).
+Puedes cambiar a RandomForest o GradientBoosting (ya hay opciones comentadas en `main.py`).
 
 ## Predicción de una imagen nueva
 Ejemplo usando el modelo ya entrenado en memoria:
