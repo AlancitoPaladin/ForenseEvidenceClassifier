@@ -1,6 +1,6 @@
 # Singns
 
-Clasificador de imágenes por clases (letras/etiquetas) usando Bag of Visual Words (BoVW) con descriptores locales (SIFT/KAZE) y un clasificador supervisado de scikit-learn.
+Clasificador de imágenes de huellas de calzado para evidencia forense usando Bag of Visual Words (BoVW) con descriptores locales (SIFT/KAZE) y un clasificador supervisado de scikit-learn. El dataset es **shoes**, con dos clases: **Nike** y **Adidas**.
 
 ## Resumen
 - Lee imágenes organizadas por carpetas (una carpeta = una clase).
@@ -21,17 +21,16 @@ pip install opencv-contrib-python scikit-learn numpy joblib
 ```
 
 ## Uso rápido
-1. Asegura tu dataset con esta estructura:
+1. Asegura tu dataset **shoes** con esta estructura:
 ```text
-images/
-  a/
-  b/
-  c/
+shoes/
+  Nike/
+  Adidas/
 ```
 
 2. Edita la ruta del dataset en `main.py`:
 ```python
-X, y = bvw.load_dataset("/ruta/a/tu/dataset")
+X, y = bvw.load_dataset("/ruta/a/shoes")
 # X, y = bvw.load_dataset("./images")
 ```
 
@@ -73,7 +72,7 @@ Para usar modelos guardados, hay un bloque de ejemplo al final de `main.py` para
 Singns/
 ├─ bvw.py                 # Lógica BoVW: carga, detectores, extracción y transformaciones
 ├─ main.py                # Entrenamiento, evaluación y guardado de modelos
-├─ images/                # Dataset principal (por clase)
+├─ shoes/                 # Dataset principal (Nike/Adidas)
 ├─ predict/               # Imágenes para pruebas manuales
 ├─ models/                # Modelos guardados (se crea automáticamente)
 └─ util.py, reuse_model.py, show.py, rezise.py, bvw.py
